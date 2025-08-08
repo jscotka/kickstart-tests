@@ -211,10 +211,10 @@ function should_skip_test() {
     return 1
 }
 
-# Find all tests in the . folder. These tests will be filtered by TESTTYPE parameter
+# Find all tests in the tests/ folder. These tests will be filtered by TESTTYPE parameter
 # if specified.
 function find_tests() {
-    local tests=$(find . -maxdepth 1 -name '*.sh' -a -perm -o+x)
+    local tests=$(find tests/ -maxdepth 1 -name '*.sh' -a -perm -o+x)
 
     local newtests=""
     local skipped_tests=""
@@ -255,8 +255,19 @@ if [[ $# != 0 ]]; then
         else
             test="${t}.sh"
         fi
-        if ! should_skip_test ${test}; then
-            tests+="${test} "
+        
+        # Look for test in the tests/ directory
+        if [[ -f "tests/${test}" ]]; then
+            test_path="tests/${test}"
+        elif [[ -f "${test}" ]]; then
+            test_path="${test}"
+        else
+            echo "Test file not found: ${test} (looked in tests/ and current directory)"
+            continue
+        fi
+        
+        if ! should_skip_test ${test_path}; then
+            tests+="${test_path} "
         fi
     done
 elif [[ "${ghprbActualCommit}" != "" ]]; then
@@ -264,12 +275,12 @@ elif [[ "${ghprbActualCommit}" != "" ]]; then
     tests=""
 
     candidates="$(for f in ${files}; do
-        # Only accept files that are .sh or .ks.in files in this top-level directory.
+        # Only accept files that are .sh or .ks.in files in the tests/ directory.
         # Those are the tests.  If either file for a particular test changed, we want
         # to run the test.  The first step of figuring this out is stripping off
         # the file extension.
-        if [[ ! "${f}" == */* && ("${f}" == *sh || "${f}" == *ks.in) ]]; then
-            echo "${f%%.*} "
+        if [[ "${f}" == tests/* && ("${f}" == *sh || "${f}" == *ks.in) ]]; then
+            echo "${f##*/}" | sed 's/\.[^.]*$//'
         fi
      done | uniq)"
 
@@ -278,11 +289,11 @@ elif [[ "${ghprbActualCommit}" != "" ]]; then
     for c in ${candidates}; do
 
         # Skip files that are not executable.
-        if [[ ! -x "${c}.sh" ]]; then
+        if [[ ! -x "tests/${c}.sh" ]]; then
             continue
         fi
 
-        tests+="${c}.sh "
+        tests+="tests/${c}.sh "
     done
 
     # Nothing find, find all tests and use TESTTYPE if specified.
