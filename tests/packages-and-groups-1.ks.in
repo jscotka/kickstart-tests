@@ -1,0 +1,66 @@
+#
+# Check package exclusion works correctly.
+
+%ksappend repos/default.ks
+%ksappend common/common_no_payload.ks
+
+%packages
+@^server-product-environment
+
+# (1) Test that you can remove a package that's part of a group
+#@anaconda-tools
+#-kdump-anaconda-addon
+@container-management
+-buildah
+
+# (2) Test that you can add and then remove the same package.
+tmux
+-tmux
+
+# (3) Test that you can add packages with a glob.
+google-noto*
+
+# (4) Test that you can remove packages with a glob.
+-grub2-efi*
+
+# Skip kmod-kvdo to avoid conflicts with kernel (gh#686).
+-vdo
+-kmod-kvdo
+%end
+
+%post
+# We don't have a way of determining if a group/env is installed or not.
+# These sentinel packages will have to do.
+
+# Testing #1 - podman should be installed, but not buildah
+rpm -q podman
+if [[ $? != 0 ]]; then
+    echo '*** podman group was not installed' >> /root/RESULT
+fi
+
+rpm -q buildah
+if [[ $? == 0 ]]; then
+    echo '*** buildah package should not have been installed' >> /root/RESULT
+fi
+
+# Testing #2 - qemu-kvm should not be installed.
+rpm -q tmux
+if [[ $? == 0 ]]; then
+    echo '*** tmux package should not have been installed' >> /root/RESULT
+fi
+
+# Testing #3 - google-noto font stuff should be installed.
+count=$(rpm -qa google-noto\* | wc -l)
+if [[ $count -lt 5 ]]; then
+    echo '*** google-noto* glob was not installed' >> /root/RESULT
+fi
+
+# Testing #4 - grub2-efi stuff should not be installed.
+count=$(rpm -qa grub2-efi\* | wc -l)
+if [[ $count -gt 0 ]]; then
+    echo '*** grub2-efi* glob should not have been installed' >> /root/RESULT
+fi
+
+%ksappend validation/success_if_result_empty.ks
+
+%end

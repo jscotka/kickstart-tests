@@ -1,0 +1,20 @@
+#version=DEVEL
+#
+# Check that no locales get installed for
+# %packages --instlangs=.
+
+%ksappend repos/default.ks
+%ksappend common/common_no_payload.ks
+
+%ksappend payload/packages_instlangs_2.ks
+
+%post
+# Make sure no .mo files were installed
+molist="$(find /usr/share/locale -name '*.mo')"
+if [ -n "$molist" ]; then
+    echo "*** .mo files were installed: $molist" >> /root/RESULT
+fi
+
+%ksappend validation/success_if_result_empty.ks
+
+%end

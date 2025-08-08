@@ -1,0 +1,38 @@
+%ksappend repos/default.ks
+
+network --bootproto=dhcp --device=52:54:00:12:34:51 --bindto=mac
+network --bootproto=dhcp --device=52:54:00:12:34:52 --activate --bindto=mac
+
+bootloader --timeout=1
+zerombr
+clearpart --all
+autopart
+
+keyboard us
+lang en
+timezone America/New_York
+rootpw qweqwe
+shutdown
+
+%packages
+%end
+
+%post
+
+@KSINCLUDE@ post-lib-network.sh
+
+# --device=<MAC> is used to specify the interface, not to bind the
+# connection to the MAC address
+check_device_config_bound_to_mac @KSTEST_NETDEV1@
+check_config_exists @KSTEST_NETDEV1@-1 no
+check_device_connected @KSTEST_NETDEV1@ yes
+
+check_device_config_bound_to_mac @KSTEST_NETDEV2@
+check_config_exists @KSTEST_NETDEV2@-1 no
+check_device_connected @KSTEST_NETDEV2@ yes
+
+# No error was written to /root/RESULT file, everything is OK
+if [[ ! -e /root/RESULT ]]; then
+   echo SUCCESS > /root/RESULT
+fi
+%end

@@ -1,0 +1,26 @@
+#version=DEVEL
+#
+# Test that https:// repositories work as expected. Most tests run with http to
+# be able to squid-cache the downloads.
+
+# Use defaults.
+%ksappend repos/default.ks
+%ksappend common/common_no_payload.ks
+%ksappend payload/default_packages.ks
+
+%post
+# (1) No http:// Fedora repo sources
+if out=$(grep -r 'http://.*\.fedoraproject' /etc/yum.repos.d/); then
+    echo "*** Found Fedora http repo: $out" > /root/RESULT
+    exit 1
+fi
+
+# (2) Should have at least the default https:// repo source
+if ! grep -r 'https://.*\.fedoraproject' /etc/yum.repos.d/; then
+    echo '*** Did not find https default Fedora repo' > /root/RESULT
+    exit 1
+fi
+
+%ksappend validation/success_if_result_empty.ks
+
+%end

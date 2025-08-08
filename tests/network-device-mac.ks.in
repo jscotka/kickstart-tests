@@ -1,0 +1,48 @@
+%ksappend repos/default.ks
+
+network --bootproto=dhcp --device=52:54:00:12:34:56 --ipv6=2001:cafe:cafe::1/64
+
+bootloader --timeout=1
+zerombr
+clearpart --all
+autopart
+
+keyboard us
+lang en
+timezone America/New_York
+rootpw qweqwe
+shutdown
+
+%packages
+%end
+
+%post
+
+@KSINCLUDE@ post-lib-network.sh
+@KSINCLUDE@ scripts-lib.sh
+platform="$(get_platform @KSTEST_OS_NAME@ @KSTEST_OS_VERSION@)"
+
+# --device=<MAC> is used to specify the interface, not to bind the
+# connection to the MAC address
+#check_device_config_value ksdev0 HWADDR __NONE ethernet mac-address __NONE
+# Nevertheless in the ks injected in virt-install (unlike in the -httpks
+# versions), the parse-kickstart is processed too early, device name is not
+# discoverable in sysfs yet so it picks its own name ksdevX and uses infname= to
+# name the device which results in binding also to HWADDR (because of ifname=
+# being used).
+if [ "${platform}" == "rhel8" ]; then
+    # RHEL-8-FAILURE mac binding for ifname= is not applied when updating connection,
+    # fixed upstream in commit a5cb6311e22587b539248bd5d2a227d08c0bb581
+    check_device_config_value ksdev0 HWADDR __NONE ethernet mac-address __NONE
+else
+    check_device_config_value ksdev0 HWADDR __ANY ethernet mac-address __ANY
+fi
+
+check_device_connected ksdev0 yes
+check_device_config_value ksdev0 IPV6ADDR 2001:cafe:cafe::1/64 ipv6 address1 2001:cafe:cafe::1/64
+
+# No error was written to /root/RESULT file, everything is OK
+if [[ ! -e /root/RESULT ]]; then
+   echo SUCCESS > /root/RESULT
+fi
+%end

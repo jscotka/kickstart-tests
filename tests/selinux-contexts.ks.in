@@ -1,0 +1,25 @@
+
+%ksappend repos/default.ks
+%ksappend common/common_no_payload.ks
+%ksappend payload/default_packages.ks
+
+# Reboot the installed system.
+reboot
+
+# Validate on the first boot.
+%ksappend validation/success_on_first_boot.ks
+
+# Set up the actual test.
+%post
+
+# Make sure something doesn't fix the labels before we can check them.
+systemctl disable selinux-autorelabel.service
+
+# Write the code to run after reboot. It lists files with wrong SELinux contexts.
+cat > /usr/libexec/kickstart-test.sh << 'EOF'
+
+restorecon -rvn / -e /dev -e /mnt -e /proc -e /run -e /sys
+
+EOF
+
+%end

@@ -1,0 +1,20 @@
+#version=DEVEL
+#
+# Check the %packages --default flag works.
+
+%ksappend repos/default.ks
+%ksappend common/common_no_payload.ks
+
+%packages --default
+%end
+
+%post
+
+# Check that there is any environment installed
+dnf group list --installed | egrep -q "Installed Environment Groups"
+if [ $? -eq 0 ]; then
+    echo SUCCESS > /root/RESULT
+else
+    echo '*** Failed check: there is any environment installed.' > /root/RESULT
+fi
+%end

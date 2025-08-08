@@ -1,0 +1,25 @@
+#version=DEVEL
+#
+# Check the --excludeWeakdeps flag works correctly.
+# Using this flag should effectively turn off weak
+# depondencies during the RPM installation transaction.
+
+%ksappend repos/default.ks
+%ksappend common/common_no_payload.ks
+
+%ksappend payload/packages_weakdeps.ks
+
+%post
+# Make sure the --recommends packages from gnupg2 are not installed
+if rpm -q pinentry ; then
+    echo "pinentry was installed" >> /root/RESULT
+fi
+
+# Check that gnupg2's --recommends did not change unexpectedly
+if ! ( rpm -q --recommends gnupg2 | grep -q pinentry ) ; then
+    echo "gnupg2 --recommends has changed, test needs to be updated" >> /root/RESULT
+fi
+
+%ksappend validation/success_if_result_empty.ks
+
+%end

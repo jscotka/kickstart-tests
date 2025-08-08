@@ -1,0 +1,40 @@
+%ksappend repos/default.ks
+network --bootproto=dhcp
+
+bootloader --timeout=1
+zerombr
+clearpart --all --initlabel
+
+reqpart
+part pv.68 --asprimary --fstype="lvmpv" --ondisk=vda --size=9000
+part /boot --asprimary --fstype="ext4" --ondisk=vda --size=500
+volgroup vg01 --pesize=4096 pv.68
+logvol /  --fstype="ext4" --size=5000 --encrypted --name=root_lv --vgname=vg01 --passphrase=OntarioIsAProvince --label=root
+logvol /var  --fstype="ext4" --size=2000 --name=var_lv --vgname=vg01
+logvol swap  --fstype="swap" --size=1024 --name=swap_lv --vgname=vg01
+logvol /home  --fstype="ext4" --grow --size=1 --name=home_lv --vgname=vg01
+
+keyboard us
+lang en_US.UTF-8
+timezone America/New_York --utc
+rootpw testcase
+shutdown
+
+%ksappend payload/default_packages.ks
+
+%post
+root_lv_type=$(blkid -ovalue -sTYPE /dev/mapper/vg01-root_lv)
+if [ "$root_lv_type" != "crypto_LUKS" ]; then
+    echo "root LV is not encrypted" > /home/RESULT
+fi
+
+# check that the encrypted partition has discard enabled (#1421596)
+grep -q discard /etc/crypttab
+if [ $? != 0 ]; then
+    echo "discard not enabled for root_lv" >> /home/RESULT
+fi
+
+if [ ! -e /home/RESULT ]; then
+    echo SUCCESS > /home/RESULT
+fi
+%end

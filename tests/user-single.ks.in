@@ -1,0 +1,154 @@
+%ksappend repos/default.ks
+
+
+network --bootproto=dhcp
+
+bootloader --timeout=1
+zerombr
+
+clearpart --all --initlabel
+autopart
+
+keyboard us
+lang en
+timezone America/New_York
+
+rootpw qweqwe
+
+## TEST CREATE USER
+# Create specific user group
+group --name=kosygroup --gid=5001
+
+# Create specific user
+user --name=kosieh --gecos="Kosieh Barter ☃" --homedir=/home/kbarter --password="$6$QsJCB9E6geIjWNvn$UZLEtnHYgKmFgrPo0fY1qNBc/aRi9b01f19w9mpdFm9.MPblckUuFYvpRLSzeYeR/6lO/2uY4WtjhbryC0k2L/" --iscrypted --shell=/bin/bash --uid=4001 --gid=5001 --groups=wheel,users
+
+# Give that user a (bogus) ssh key.
+sshkey --username=kosieh "this is a bogus ssh key"
+
+shutdown
+
+# Make sure we get the kind of awk that can deal with the unicode crud we're going to hand it
+%packages
+gawk
+%end
+
+%post
+cat - > /tmp/passwd-test.awk << "EOF"
+BEGIN {
+    FS = ":";
+    userfound = 0;
+}
+
+$1 == "kosieh" {
+    userfound++;
+
+    # Check GECOS: real name
+    # Also check that the unicode made it through ok. The escape sequences are
+    # U+2603 encoded as UTF-8, which is lovingly hand-encoded here instead of
+    # just using the character to make sure the character did not just get mangled
+    # the same way twice.
+    if ($5 != "Kosieh Barter \xe2\x98\x83") {
+        print "*** User is present, but not all detials: REAL NAME (GECOS)" >> /root/RESULT;
+    }
+
+    # Check if the user has his/her bash
+    if ($7 != "/bin/bash") {
+        print "*** User is present, but /bin/bash is not set" >> /root/RESULT;
+    }
+
+    # Check if the user is in the correct group
+    if ($4 != "5001") {
+        print "*** User is present, but group assignment is incorrect" >> /root/RESULT;
+    }
+
+    # Check for home dir in /etc/passwd
+    if ($6 != "/home/kbarter") {
+        print "*** Home directory not in passwd file" >> /root/RESULT;
+    }
+}
+
+# If the user was not found at all, (or was found more than once) that is a
+# problem
+END {
+    if (userfound != 1) {
+        print "*** User is not present in system." >> /root/RESULT;
+    }
+}
+EOF
+
+cat - > /tmp/group-test.awk << "EOF"
+BEGIN {
+    FS = ":";
+    groupfound = 0;
+}
+
+$1 == "kosygroup" {
+    groupfound++;
+    
+    # Check the GID
+    if ($3 != "5001") {
+        print "*** Group created with wrong GID" >> /root/RESULT;
+    }
+}
+
+# If the group is not there exactly once, that's a problem
+END {
+    if (groupfound != 1) {
+        print "*** Group was not created." >> /root/RESULT;
+    }
+}
+EOF
+
+cat - > /tmp/shadow-test.awk << "EOF"
+BEGIN {
+    FS = ":";
+    userfound = 0;
+}
+
+$1 == "kosieh" {
+    userfound++;
+    if ($2 != "$6$QsJCB9E6geIjWNvn$UZLEtnHYgKmFgrPo0fY1qNBc/aRi9b01f19w9mpdFm9.MPblckUuFYvpRLSzeYeR/6lO/2uY4WtjhbryC0k2L/") {
+        print "*** User is present, passwords DO NOT match" >> /root/RESULT;
+    }
+}
+
+END {
+    if (userfound != 1) {
+        print "*** User not found in /etc/shadow" >> /root/RESULT;
+    }
+}
+EOF
+
+gawk -f /tmp/passwd-test.awk /etc/passwd
+gawk -f /tmp/group-test.awk /etc/group
+gawk -f /tmp/shadow-test.awk /etc/shadow
+
+# Check if the user has PHYSICAL home dir
+if [[ ! -d /home/kbarter ]]; then
+    echo "*** Home directory not found" >> /root/RESULT
+fi
+
+# Check that an ssh key was added.
+if [[ ! -f /home/kbarter/.ssh/authorized_keys ]]; then
+    echo "*** .authorized_keys not created" >> /root/RESULT
+fi
+
+perms="$(stat --format='%u %g %a' /home/kbarter/.ssh)"
+if [[ "${perms}" != "4001 5001 700" ]]; then
+    echo "*** /home/kbarter/.ssh does not have the right permissions; got " ${perms} >> /root/RESULT
+fi
+
+perms="$(stat --format='%u %g %a' /home/kbarter/.ssh/authorized_keys)"
+if [[ "${perms}" != "4001 5001 600" ]]; then
+    echo "*** /home/kbarter/.ssh/authorized_keys does not have the right permissions; got " ${perms} >> /root/RESULT
+fi
+
+if [[ "$(cat /home/kbarter/.ssh/authorized_keys)" != "this is a bogus ssh key" ]]; then
+    echo "*** .authorized_keys doesn't have the right contents" >> /root/RESULT
+fi
+
+# Final check
+if [[ ! -e /root/RESULT ]]; then
+    echo SUCCESS > /root/RESULT
+fi
+%end

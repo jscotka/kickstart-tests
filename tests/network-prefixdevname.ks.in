@@ -1,0 +1,73 @@
+# Tests the prefixdevname feature (rhbz#2267227)
+%ksappend repos/default.ks
+
+%include /tmp/ksinclude
+%pre
+echo "network --device bond0 --bootproto dhcp --bondslaves=kstest2,kstest3 --bondopts=mode=active-backup,primary=kstest2 --activate --onboot=no" >> /tmp/ksinclude
+%end
+
+bootloader --timeout=1
+zerombr
+clearpart --all
+autopart
+
+keyboard us
+lang en
+timezone America/New_York
+rootpw qweqwe
+shutdown
+
+%packages
+%end
+
+%post --nochroot
+
+@KSINCLUDE@ post-nochroot-lib-network.sh
+
+pass_autoconnections_info_to_chroot
+
+check_gui_configurations kstest0 kstest1 kstest2 kstest3 bond0
+
+%end
+
+%post
+
+@KSINCLUDE@ post-lib-network.sh
+
+# Device activated in initramfs was renamed
+check_device_connected kstest0 yes
+check_device_config_value kstest0 ONBOOT yes connection autoconnect __NONE
+
+# Device not activated in initramfs should be renamed as well (#1643515)
+detect_nm_has_autoconnections_off
+nm_has_autoconnections_off=$?
+if [[ $nm_has_autoconnections_off -eq 0 ]]; then
+    check_device_connected kstest1 no
+else
+    check_device_connected kstest1 yes
+fi
+
+check_device_config_value bond0 ONBOOT no connection autoconnect false
+
+check_device_config_value bond0_slave_1 ONBOOT no connection autoconnect false
+check_device_config_value bond0_slave_2 ONBOOT no connection autoconnect false
+check_device_config_value bond0_slave_1 MASTER bond0 connection controller bond0
+check_device_config_value bond0_slave_2 MASTER bond0 connection controller bond0
+
+check_device_connected bond0 yes
+check_bond_has_slave bond0 kstest2 yes
+check_bond_has_slave bond0 kstest3 yes
+check_bond_has_slave bond0 kstest0 no
+check_bond_has_slave bond0 kstest1 no
+
+# Check the extra args.
+grep "^GRUB_CMDLINE_LINUX=" /etc/default/grub | grep "net.ifnames.prefix=kstest"
+if [[ $? -ne 0 ]]; then
+    echo '*** Failed check: boot option is passed to installed system boot arguments' >> /root/RESULT
+fi
+
+# No error was written to /root/RESULT file, everything is OK
+if [[ ! -e /root/RESULT ]]; then
+   echo SUCCESS > /root/RESULT
+fi
+%end

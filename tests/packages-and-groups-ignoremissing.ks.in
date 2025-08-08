@@ -1,0 +1,39 @@
+#version=DEVEL
+#
+# what we are testing there:
+# - that multiple missing packages & groups (at the same time) are ignored
+#   if --ignoremissing is used
+# - that regular packages and groups requested at the same time
+#   are installed correctly
+# - that such an installation finishes successfully
+
+%ksappend repos/default.ks
+%ksappend common/common_no_payload.ks
+
+%packages --ignoremissing
+fake-package-name-1
+fake-package-name-2
+@fake-group-name-1
+@fake-group-name-2
+vim
+
+# Another group that is common for Fedora and RHEL could be @anaconda-tools
+# (checking eg presence of cryptsetup package). The number of packages would
+# grow from 432 to 702 though.
+@dial-up
+%end
+
+%post
+rpm -q vim-minimal
+if [[ $? != 0 ]]; then
+    echo '*** vim package was not installed' >> /root/RESULT
+fi
+
+rpm -q ppp
+if [[ $? != 0 ]]; then
+    echo '*** ppp should have been installed via the dial-up package group' >> /root/RESULT
+fi
+
+%ksappend validation/success_if_result_empty.ks
+
+%end

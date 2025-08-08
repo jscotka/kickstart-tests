@@ -1,0 +1,67 @@
+# https://github.com/rhinstaller/anaconda/pull/5399
+#
+# Test that ostree container installation works.
+# Depends on the referenced ostree container being bootable.
+# Replaces the rpm-ostree-container test which did not boot
+# into the installed system to execute the checks.
+
+# Use the default settings.
+%ksappend common/common_no_storage_and_payload.ks
+# On Fedora enforce lvm scheme (overriding btrfs default)
+%ksappend storage/ostreecontainer_autopart.ks
+
+ostreecontainer --no-signature-verification --remote=test-remote --stateroot=test-stateroot --url=@KSTEST_OSTREECONTAINER_URL@
+
+# Reboot the installed system.
+reboot
+
+# Validate on the first boot.
+%ksappend validation/success_on_first_boot.ks
+
+%post
+
+HOSTNAME=fedoraproject.org
+getent hosts ${HOSTNAME}
+if [[ $? -ne 0 ]]; then
+    echo "*** Failed check: name resolution on ${HOSTNAME} in %post script" >> /root/RESULT
+fi
+
+# Checks after boot
+cat >> /var/lib/extensions/kickstart-tests/usr/libexec/kickstart-test.sh << 'EOF'
+
+# propagate any errors from %post validations
+if [ -e /root/RESULT ]; then
+    cat /root/RESULT
+fi
+
+# Check that state root 'test-stateroot' exists
+if [ ! -d /ostree/deploy/test-stateroot ]; then
+    echo "Couldn't find 'test-stateroot' stateroot"
+fi
+
+# Check that bootupd information is present
+if [ ! -e /boot/bootupd-state.json ]; then
+    echo "/boot/bootupd-state.json not found on installed system after booting"
+fi
+
+bootupctl --help &> /dev/null || echo "bootupctl command not available after booting"
+bootc --help &> /dev/null || echo "bootc command not available after booting"
+
+expected_url="@KSTEST_OSTREECONTAINER_URL@"
+remote_url="$(ostree remote show-url test-remote)"
+if [ ${?} -ne 0 ]; then
+    echo "Couldn't list remote URL for 'test-remote'"
+fi
+
+if [ "${remote_url}" != "${expected_url}" ]; then
+    echo "Unexpected URL: ${remote_url}, expected ${expected_url}"
+fi
+
+# Check if console argument is passed to the installed system
+rpm-ostree kargs | grep -q console=ttyS7 > /dev/null
+if [ ${?} -ne 0 ]; then
+    echo "The console kernel parameter was not preserved, current list: $(rpm-ostree kargs)"
+fi
+
+EOF
+%end

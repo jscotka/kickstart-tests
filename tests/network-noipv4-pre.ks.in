@@ -1,0 +1,54 @@
+%ksappend repos/default.ks
+
+%include /tmp/ksinclude
+%pre
+echo "network --device=@KSTEST_NETDEV2@ --noipv4 --no-activate --onboot=yes" >> /tmp/ksinclude
+echo "network --device=@KSTEST_NETDEV3@ --noipv4 --noipv6 --activate --onboot=no" >> /tmp/ksinclude
+echo "network --device=@KSTEST_NETDEV4@ --noipv4 --activate --onboot=no" >> /tmp/ksinclude
+%end
+
+bootloader --timeout=1
+zerombr
+clearpart --all
+autopart
+
+keyboard us
+lang en
+timezone America/New_York
+rootpw qweqwe
+shutdown
+
+%packages
+%end
+
+%post --nochroot
+
+@KSINCLUDE@ post-nochroot-lib-network.sh
+
+pass_autoconnections_info_to_chroot
+
+check_gui_configurations @KSTEST_NETDEV1@ @KSTEST_NETDEV2@ @KSTEST_NETDEV3@ @KSTEST_NETDEV4@
+
+%end
+
+%post
+
+@KSINCLUDE@ post-lib-network.sh
+
+check_config_key_exists @KSTEST_NETDEV2@ BOOTPROTO no ipv4 method disabled
+check_config_key_exists @KSTEST_NETDEV3@ BOOTPROTO no ipv4 method disabled
+check_config_key_exists @KSTEST_NETDEV4@ BOOTPROTO no ipv4 method disabled
+
+check_device_connected @KSTEST_NETDEV3@ yes
+check_device_has_ipv4_address @KSTEST_NETDEV3@ no
+
+# TODO create test with virtual network having ipv6-only connection
+check_device_has_ipv4_address @KSTEST_NETDEV4@ no
+check_device_connected @KSTEST_NETDEV4@ yes
+check_connection_device @KSTEST_NETDEV4@ @KSTEST_NETDEV4@
+
+# No error was written to /root/RESULT file, everything is OK
+if [[ ! -e /root/RESULT ]]; then
+   echo SUCCESS > /root/RESULT
+fi
+%end

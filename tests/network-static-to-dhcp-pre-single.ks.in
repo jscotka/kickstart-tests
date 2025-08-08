@@ -1,0 +1,47 @@
+# rhbz#1432886
+%ksappend repos/default.ks
+%include /tmp/ksinclude
+%pre
+echo "network --device=@KSTEST_NETDEV1@ --bootproto dhcp --activate" >> /tmp/ksinclude
+%end
+
+
+bootloader --timeout=1
+zerombr
+clearpart --all
+autopart
+
+keyboard us
+lang en
+timezone America/New_York
+rootpw qweqwe
+shutdown
+
+%packages
+%end
+
+%post --nochroot
+
+@KSINCLUDE@ post-nochroot-lib-network.sh
+
+check_gui_configurations @KSTEST_NETDEV1@
+
+%end
+
+%post
+
+@KSINCLUDE@ post-lib-network.sh
+
+check_device_connected @KSTEST_NETDEV1@ yes
+check_device_config_value @KSTEST_NETDEV1@ IPADDR __NONE ipv4 method auto
+check_device_config_value @KSTEST_NETDEV1@ PREFIX __NONE ipv4 method auto
+check_device_config_value @KSTEST_NETDEV1@ NETMASK __NONE ipv4 method auto
+check_device_config_value @KSTEST_NETDEV1@ GATEWAY __NONE ipv4 method auto
+check_device_connected @KSTEST_NETDEV1@ yes
+check_number_of_device_ipv4_addresses @KSTEST_NETDEV1@ 1
+
+# No error was written to /root/RESULT file, everything is OK
+if [[ ! -e /root/RESULT ]]; then
+   echo SUCCESS > /root/RESULT
+fi
+%end

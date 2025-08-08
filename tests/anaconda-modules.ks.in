@@ -1,0 +1,79 @@
+#version=DEVEL
+
+# Verify that only the enabled Anaconda DBus modules are started.
+
+# Use defaults.
+%ksappend repos/default.ks
+%ksappend common/common_no_payload.ks
+%ksappend payload/default_packages.ks
+
+%post --nochroot
+
+@KSINCLUDE@ scripts-lib.sh
+platform="$(get_platform @KSTEST_OS_NAME@ @KSTEST_OS_VERSION@)"
+
+# Get the activated Anaconda DBus modules.
+cat /tmp/syslog | grep "Activating service name" | \
+grep "org.fedoraproject.Anaconda.Modules" | cut -d"'" -f2 \
+| sort > /tmp/generated.out
+
+# Generate the expected output.
+# rhel8 and rhel9 don't have Runtime module
+if [ "${platform}" == "rhel8" ] || [ "${platform}" == "rhel9" ]; then
+    cat > /tmp/expected.out << EOF
+org.fedoraproject.Anaconda.Modules.Localization
+org.fedoraproject.Anaconda.Modules.Network
+org.fedoraproject.Anaconda.Modules.Payloads
+org.fedoraproject.Anaconda.Modules.Security
+org.fedoraproject.Anaconda.Modules.Services
+org.fedoraproject.Anaconda.Modules.Storage
+org.fedoraproject.Anaconda.Modules.Subscription
+org.fedoraproject.Anaconda.Modules.Timezone
+org.fedoraproject.Anaconda.Modules.Users
+EOF
+# centos has Subscription module forbidden in its conf profile
+elif [ "${platform:0:4}" == "rhel" ] && [ "@KSTEST_OS_NAME@" == "centos" ]; then
+    cat > /tmp/expected.out << EOF
+org.fedoraproject.Anaconda.Modules.Localization
+org.fedoraproject.Anaconda.Modules.Network
+org.fedoraproject.Anaconda.Modules.Payloads
+org.fedoraproject.Anaconda.Modules.Runtime
+org.fedoraproject.Anaconda.Modules.Security
+org.fedoraproject.Anaconda.Modules.Services
+org.fedoraproject.Anaconda.Modules.Storage
+org.fedoraproject.Anaconda.Modules.Timezone
+org.fedoraproject.Anaconda.Modules.Users
+EOF
+# fedora and rhel10 activate Subscription module
+# On fedora the module is allowed to fail in conf (fails on rhsm not found).
+else
+    cat > /tmp/expected.out << EOF
+org.fedoraproject.Anaconda.Modules.Localization
+org.fedoraproject.Anaconda.Modules.Network
+org.fedoraproject.Anaconda.Modules.Payloads
+org.fedoraproject.Anaconda.Modules.Runtime
+org.fedoraproject.Anaconda.Modules.Security
+org.fedoraproject.Anaconda.Modules.Services
+org.fedoraproject.Anaconda.Modules.Storage
+org.fedoraproject.Anaconda.Modules.Subscription
+org.fedoraproject.Anaconda.Modules.Timezone
+org.fedoraproject.Anaconda.Modules.Users
+EOF
+fi
+
+# Check the output
+diff /tmp/expected.out /tmp/generated.out
+
+if [[ $? != 0 ]]; then
+    echo "*** List of activated modules differs!" >> /mnt/sysroot/root/RESULT
+
+    echo "*** The following modules were expected:" >> /mnt/sysroot/root/RESULT
+    cat /tmp/expected.out >> /mnt/sysroot/root/RESULT
+
+    echo "*** The following modules were generated:" >> /mnt/sysroot/root/RESULT
+    cat /tmp/generated.out >> /mnt/sysroot/root/RESULT
+fi
+
+%end
+
+%ksappend validation/success_if_result_empty_standalone.ks

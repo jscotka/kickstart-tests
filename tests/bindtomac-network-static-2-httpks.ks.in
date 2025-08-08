@@ -1,0 +1,71 @@
+#various combinations of activation in initramfs and stage 2
+%ksappend repos/default.ks
+# activated in initramfs with dhcp, reactivated in stage 2
+network --device=@KSTEST_NETDEV2@ --bootproto static --ip @KSTEST_STATIC_IP1@ --netmask @KSTEST_STATIC_NETMASK@ --gateway @KSTEST_STATIC_GATEWAY@ --bindto mac
+# activated in initramfs with dhcp, not reactivated in stage 2
+network --device=@KSTEST_NETDEV3@ --bootproto static --ip @KSTEST_STATIC_IP2@ --netmask @KSTEST_STATIC_NETMASK@ --gateway @KSTEST_STATIC_GATEWAY@ --bindto mac
+# not activated in initramfs with dhcp, reactivated in stage 2
+network --device=@KSTEST_NETDEV4@ --bootproto static --ip @KSTEST_STATIC_IP3@ --netmask @KSTEST_STATIC_NETMASK@ --gateway @KSTEST_STATIC_GATEWAY@ --activate --bindto mac
+# not activated in initramfs with dhcp, not reactivated in stage 2
+network --device=@KSTEST_NETDEV5@ --bootproto static --ip @KSTEST_STATIC_IP4@ --netmask @KSTEST_STATIC_NETMASK@ --gateway @KSTEST_STATIC_GATEWAY@ --bindto mac
+
+bootloader --timeout=1
+zerombr
+clearpart --all
+autopart
+
+keyboard us
+lang en
+timezone America/New_York
+rootpw qweqwe
+shutdown
+
+%packages
+%end
+
+%post --nochroot
+
+@KSINCLUDE@ post-nochroot-lib-network.sh
+
+pass_autoconnections_info_to_chroot
+
+check_gui_configurations @KSTEST_NETDEV1@ @KSTEST_NETDEV2@ @KSTEST_NETDEV3@ @KSTEST_NETDEV4@ @KSTEST_NETDEV5@
+
+%end
+
+%post
+
+@KSINCLUDE@ post-lib-network.sh
+
+check_device_connected @KSTEST_NETDEV1@ yes
+
+check_device_config_value @KSTEST_NETDEV2@ IPADDR @KSTEST_STATIC_IP1@ ipv4 method manual
+check_device_connected @KSTEST_NETDEV2@ yes
+check_device_ipv4_address @KSTEST_NETDEV2@ @KSTEST_STATIC_IP1@
+check_device_config_bound_to_mac @KSTEST_NETDEV2@
+
+check_device_config_value @KSTEST_NETDEV3@ IPADDR @KSTEST_STATIC_IP2@ ipv4 method manual
+check_device_connected @KSTEST_NETDEV3@ yes
+check_device_config_bound_to_mac @KSTEST_NETDEV3@
+
+check_device_config_value @KSTEST_NETDEV4@ IPADDR @KSTEST_STATIC_IP3@ ipv4 method manual
+check_device_connected @KSTEST_NETDEV4@ yes
+check_device_ipv4_address @KSTEST_NETDEV4@ @KSTEST_STATIC_IP3@
+check_device_config_bound_to_mac @KSTEST_NETDEV4@
+
+check_device_config_value @KSTEST_NETDEV5@ IPADDR @KSTEST_STATIC_IP4@ ipv4 method manual
+detect_nm_has_autoconnections_off
+nm_has_autoconnections_off=$?
+if [[ $nm_has_autoconnections_off -eq 0 ]]; then
+    check_device_connected @KSTEST_NETDEV5@ no
+else
+    # Ifcfg from initramfs is no longer blocking default autoconnection
+    check_device_connected @KSTEST_NETDEV5@ yes
+fi
+check_device_config_bound_to_mac @KSTEST_NETDEV5@
+
+# No error was written to /root/RESULT file, everything is OK
+if [[ ! -e /root/RESULT ]]; then
+   echo SUCCESS > /root/RESULT
+fi
+%end
